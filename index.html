@@ -54,6 +54,31 @@
   .po { margin-top:3px; font-weight:700; font-size:12px; }
   .po.ok { color:var(--green); } .po.bad { color:var(--red); } .po.unk { color:var(--muted); }
   .help { font-size:13px; color:var(--muted); margin:6px 0 0; }
+  .chip { display:inline-block; font-size:13px; font-weight:700; padding:3px 10px; border-radius:999px; background:#eef1f5; color:var(--muted); }
+  .chip.ok { background:#dcfce7; color:var(--green); }
+  .group.done { border-color:#86efac; }
+  .thumb img { cursor:zoom-in; }
+  .bigbtn { font-size:17px; padding:12px 22px; }
+  .overlay { position:fixed; inset:0; background:#0f141e; z-index:50; display:flex; flex-direction:column; color:#fff; }
+  .overlay.top { z-index:60; background:#05080c; }
+  .ov-bar { display:flex; align-items:center; gap:12px; padding:12px 18px; background:#111827; flex-wrap:wrap; }
+  .ov-bar .title { font-size:20px; font-weight:700; }
+  .ov-bar .sub2 { color:#cbd5e1; font-size:15px; }
+  .ov-bar .sp { flex:1; }
+  .ov-bar button.ghost { background:#374151; color:#fff; }
+  .ov-warns { margin:0; padding:8px 18px 8px 38px; background:#7f1d1d; color:#fff; font-weight:700; font-size:16px; }
+  .ov-ok { padding:8px 18px; background:#14532d; color:#fff; font-weight:700; font-size:16px; }
+  .rv-pages { flex:1; display:flex; gap:16px; overflow:auto; padding:16px 18px; align-items:flex-start; }
+  .rv-page { flex:none; text-align:center; }
+  .rv-page .lbl { font-size:15px; margin-bottom:6px; color:#e5e7eb; }
+  .rv-page .lbl b.gr { color:#93c5fd; } .rv-page .lbl b.ok { color:#86efac; } .rv-page .lbl b.bad { color:#fca5a5; }
+  .rv-page canvas { background:#fff; border-radius:4px; cursor:zoom-in; box-shadow:0 4px 18px rgba(0,0,0,.5); }
+  .rv-foot { display:flex; align-items:center; gap:12px; padding:12px 18px; background:#111827; }
+  .rv-foot .sp { flex:1; text-align:center; color:#cbd5e1; font-size:15px; }
+  #rvOk { background:#16a34a; font-size:17px; padding:12px 26px; }
+  #rvOk.done { background:#374151; }
+  .lb-body { flex:1; overflow:auto; text-align:center; padding:12px; }
+  .lb-body canvas { background:#fff; }
   footer { color:var(--muted); font-size:13px; text-align:center; margin:30px 0; }
 </style>
 </head>
@@ -78,11 +103,41 @@
       <div>
         <div class="big" id="sumText"></div>
         <div id="sumWarn"></div>
-        <p class="help">ตรวจทุกชุดก่อนดาวน์โหลด · กดปุ่ม ✂ ใต้รูปเพื่อตัดชุดเพิ่ม หรือ "รวมกับชุดถัดไป" เพื่อยกเลิกจุดตัด · คลิกป้าย GR/INV เพื่อเปลี่ยนชนิดหน้า · แก้ชื่อไฟล์ได้ในช่องของแต่ละชุด</p>
+        <div id="confText" style="margin-top:4px;font-weight:700"></div>
+        <p class="help">กด "เริ่มตรวจทีละชุด" เพื่อดูเอกสารขนาดใหญ่แล้วกดยืนยันทีละชุด · คลิกรูปเพื่อขยาย · ต้องยืนยันครบทุกชุดจึงดาวน์โหลดได้<br>ถ้าแบ่งชุดผิด: กดปุ่ม ✂ ใต้รูปเพื่อตัดชุดเพิ่ม หรือ "รวมกับชุดถัดไป" · คลิกป้าย GR/INV เพื่อเปลี่ยนชนิดหน้า · แก้ชื่อไฟล์ได้ในช่องของแต่ละชุด</p>
       </div>
-      <button id="zip">ดาวน์โหลดทั้งหมด (ZIP)</button>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button id="startReview" class="bigbtn">▶ เริ่มตรวจทีละชุด</button>
+        <button id="zip" class="bigbtn" disabled>ดาวน์โหลดทั้งหมด (ZIP)</button>
+      </div>
     </div>
     <div id="groups"></div>
+  </div>
+
+  <!-- หน้าตรวจทีละชุด -->
+  <div id="rv" class="overlay hidden">
+    <div class="ov-bar">
+      <span class="title" id="rvTitle"></span><span class="sub2" id="rvMeta"></span>
+      <span class="sp"></span><button class="ghost" id="rvClose">✕ ปิด (กลับไปแก้การแบ่งชุด)</button>
+    </div>
+    <div id="rvStatus"></div>
+    <div class="rv-pages" id="rvPages"></div>
+    <div class="rv-foot">
+      <button class="ghost" id="rvPrev">◀ ชุดก่อนหน้า</button>
+      <span class="sp" id="rvCount"></span>
+      <button id="rvOk">✔ ตรวจแล้ว ยืนยันชุดนี้</button>
+      <button class="ghost" id="rvNext">ชุดถัดไป ▶</button>
+    </div>
+  </div>
+  <!-- ขยายดูทีละหน้า -->
+  <div id="lb" class="overlay top hidden">
+    <div class="ov-bar">
+      <span class="title" id="lbTitle"></span><span class="sp"></span>
+      <button class="ghost" id="lbPrev">◀ หน้าก่อน</button><button class="ghost" id="lbNext">หน้าถัดไป ▶</button>
+      <button class="ghost" id="lbOut">− ย่อ</button><button class="ghost" id="lbFit">พอดีจอ</button><button class="ghost" id="lbIn">+ ขยาย</button>
+      <button class="ghost" id="lbRot">⟳ หมุน</button><button class="ghost" id="lbClose">✕ ปิด</button>
+    </div>
+    <div class="lb-body" id="lbBody"></div>
   </div>
 
   <footer>PDF Invoice Splitter · pdf.js · zxing-wasm · Tesseract.js · pdf-lib · JSZip</footer>
@@ -115,7 +170,7 @@ function deviceInfo() {
 
 function logEvent(event, data = {}) {
   if (!LOG_URL || LOG_URL.startsWith('__')) return;
-  const body = JSON.stringify({ event, ...deviceInfo(), ...data });
+  const body = JSON.stringify({ app: 'GR', event, ...deviceInfo(), ...data });
   try {
     fetch(LOG_URL, { method: 'POST', mode: 'no-cors', keepalive: true,
       headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body });
@@ -174,7 +229,8 @@ const safeName = s => s.replace(/[\\/:*?"<>|]/g, '_').replace(/\.pdf$/i, '').tri
 
 // ===== สถานะ =====
 const $ = id => document.getElementById(id);
-let pdfFile = null, srcBytes = null, pages = [], cuts = new Set(), names = {}, stamp = '', manualEdits = 0, downloaded = false, dlKeys = new Set();
+let pdfFile = null, srcBytes = null, pdfDoc = null, pages = [], cuts = new Set(), names = {}, stamp = '', manualEdits = 0, downloaded = false, dlKeys = new Set();
+let confirmed = new Set(), allConfLogged = false;
 
 function setStatus(msg, err = false) { $('status').textContent = msg; $('status').className = err ? 'err' : ''; }
 function setProgress(f) { $('progress').classList.toggle('hidden', f == null); if (f != null) $('bar').firstElementChild.style.width = (f * 100) + '%'; }
@@ -190,7 +246,9 @@ async function pickFile(f) {
   if (!f) return;
   if (f.type !== 'application/pdf' && !f.name.toLowerCase().endsWith('.pdf')) { setStatus('กรุณาเลือกไฟล์ PDF เท่านั้น', true); return; }
   if (pages.length && !downloaded && !confirm('ผลการแยกชุดเดิมยังไม่ได้ดาวน์โหลด จะเปิดไฟล์ใหม่และทิ้งผลเดิมใช่ไหม?')) return;
+  if (pdfDoc) { pdfDoc.destroy(); pdfDoc = null; }
   pdfFile = f; pages = []; cuts = new Set(); names = {}; manualEdits = 0; downloaded = false; dlKeys = new Set();
+  confirmed = new Set(); allConfLogged = false;
   $('review').classList.add('hidden');
   $('fname').textContent = f.name + ' (' + (f.size / 1024 / 1024).toFixed(2) + ' MB)';
   logEvent('อัปโหลด', { file: f.name });
@@ -237,7 +295,7 @@ async function analyze() {
       }
       page.cleanup();
     }
-    await doc.destroy();
+    pdfDoc = doc;   // เก็บไว้ใช้แสดงภาพขนาดใหญ่ตอนตรวจ
     let done = 0;
     ocrJobs.forEach(j => j.then(() => { done++; setStatus(`กำลังอ่านเลข PO บน Invoice ${done} / ${ocrJobs.length}…`); setProgress(done / ocrJobs.length); }));
     if (ocrJobs.length) { setStatus(`กำลังอ่านเลข PO บน Invoice 0 / ${ocrJobs.length}…`); setProgress(0); }
@@ -247,10 +305,8 @@ async function analyze() {
     stamp = thaiStamp();
     render();
     const g = groups();
-    setStatus('ตรวจเสร็จแล้ว ✔ กรุณาตรวจทานแต่ละชุดก่อนดาวน์โหลด');
-    logEvent('แยกหน้า', { file: pdfFile.name, pages: pages.length,
-      perFile: `อัตโนมัติ (GR): ${note(g)}`,
-      exported: g.map(x => x.name).join(', ') });
+    setStatus('แบ่งชุดเสร็จแล้ว ✔ กด "เริ่มตรวจทีละชุด" เพื่อตรวจและยืนยันก่อนดาวน์โหลด');
+    logEvent('แยกชุด', { file: pdfFile.name, pages: pages.length, ...stats(g), exported: g.map(x => x.po || '-').join(', ') });
   } catch (err) {
     console.error(err); setProgress(null);
     setStatus('อ่านไฟล์ไม่สำเร็จ: ' + (err.message || err) + ' (ไฟล์อาจเสียหรือติดรหัสผ่าน)', true);
@@ -275,7 +331,8 @@ function groups() {
     if (grs.length && !po) warns.push('อ่านเลข PO ไม่ได้ กรุณาพิมพ์ชื่อไฟล์เอง');
     const key = idx[0];
     const def = po ? `PO${po}_${stamp}` : `ไม่มีPO_${stamp}_ชุด${k + 1}`;
-    return { idx, grs, inv, po, warns, key, name: safeName(names[key] ?? def) || def };
+    const sig = idx.map(i => i + (pages[i].gr ? 'g' : 'i')).join(',');   // เปลี่ยนการแบ่งชุด = ต้องยืนยันใหม่
+    return { idx, grs, inv, po, warns, key, sig, name: safeName(names[key] ?? def) || def };
   });
   // ตรวจเลข PO บน Invoice เทียบกับ GR
   const allPOs = new Set(pages.filter(p => p.gr && p.po).map(p => p.po));
@@ -301,6 +358,7 @@ function groups() {
   // ชื่อไฟล์ซ้ำ → เติม _2, _3
   const used = {};
   res.forEach(g => { let n = g.name, c = 1; while (used[n.toLowerCase()]) n = `${g.name}_${++c}`; used[n.toLowerCase()] = 1; g.file = n + '.pdf'; });
+  res.forEach(g => { g.confirmed = confirmed.has(g.sig); });
   return res;
 }
 
@@ -311,22 +369,30 @@ const poLabel = c => !c ? '' : c.s === 'match' ? '<div class="po ok">PO ตร�
 function render() {
   const gs = groups(), wc = gs.filter(g => g.warns.length).length;
   $('sumText').textContent = `พบ ${gs.length} ชุด จาก ${pages.length} หน้า (GR ${pages.filter(p => p.gr).length} แผ่น)`;
-  $('sumWarn').innerHTML = wc ? `<span class="bad">⚠ มี ${wc} ชุดที่ต้องตรวจ (กรอบสีแดง)</span>` : '<span class="ok">✔ ไม่พบความผิดปกติ</span>';
+  $('sumWarn').innerHTML = wc ? `<span class="bad">⚠ มี ${wc} ชุดที่มีคำเตือน (กรอบสีแดง)</span>` : '<span class="ok">✔ ไม่พบความผิดปกติ</span>';
+  const cc = gs.filter(g => g.confirmed).length, all = cc === gs.length;
+  $('confText').innerHTML = all ? `<span class="ok">✔ ยืนยันครบ ${cc}/${gs.length} ชุดแล้ว ดาวน์โหลดได้</span>`
+                                : `<span class="bad">ยืนยันแล้ว ${cc}/${gs.length} ชุด · ต้องยืนยันครบก่อนดาวน์โหลด</span>`;
+  $('zip').disabled = !all;
+  $('startReview').textContent = all ? '🔍 ดูทีละชุดอีกครั้ง' : (cc ? '▶ ตรวจชุดที่เหลือต่อ' : '▶ เริ่มตรวจทีละชุด');
   const box = $('groups'); box.innerHTML = '';
   gs.forEach((g, k) => {
     const card = document.createElement('div');
-    card.className = 'card group' + (g.warns.length ? ' warn' : '');
+    card.className = 'card group' + (g.warns.length ? ' warn' : '') + (g.confirmed ? ' done' : '');
     card.innerHTML = `
       <div class="ghead">
         <span class="gno">ชุด ${k + 1}</span>
+        ${g.confirmed ? '<span class="chip ok">✔ ตรวจแล้ว</span>' : '<span class="chip">ยังไม่ตรวจ</span>'}
         <span class="meta">${g.idx.length} หน้า (Invoice ${g.inv} + GR ${g.grs.length}) · หน้า ${g.idx[0] + 1}–${g.idx[g.idx.length - 1] + 1}${g.po && g.inv ? ` · <b class="${g.poBad ? 'bad' : g.poOk ? 'ok' : 'bad'}">PO ตรง ${g.poOk}/${g.inv} หน้า</b>` : ''}</span>
         <input value="${g.name.replace(/"/g, '&quot;')}" title="ชื่อไฟล์"><span class="meta">.pdf</span>
-        <button class="small dl">ดาวน์โหลด</button>
+        <button class="small ghost chk">🔍 ตรวจชุดนี้</button>
+        <button class="small dl" ${g.confirmed ? '' : 'disabled title="ต้องยืนยันชุดนี้ก่อน"'}>ดาวน์โหลด</button>
       </div>
       ${g.warns.length ? '<ul class="warns">' + g.warns.map(w => `<li>${w}</li>`).join('') + '</ul>' : ''}
       <div class="thumbs"></div>`;
     card.querySelector('input').onchange = e => { names[g.key] = e.target.value; manualEdits++; render(); };
     card.querySelector('.dl').onclick = () => downloadOne(g);
+    card.querySelector('.chk').onclick = () => openReview(k);
     const th = card.querySelector('.thumbs');
     g.idx.forEach(i => {
       const p = pages[i], last = i === pages.length - 1, isCut = cuts.has(i);
@@ -336,6 +402,7 @@ function render() {
         หน้า ${i + 1}
         ${poLabel(g.checks[i])}
         ${last ? '' : `<button class="small cut ${isCut ? 'join' : 'ghost'}">${isCut ? '⤵ รวมกับชุดถัดไป' : '✂ ตัดหลังหน้านี้'}</button>`}`;
+      d.querySelector('img').onclick = () => openLightbox(i);
       d.querySelector('.badge').onclick = () => { p.gr = !p.gr; p.manual = !p.manual; manualEdits++; render(); };
       if (!last) d.querySelector('.cut').onclick = () => { isCut ? cuts.delete(i) : cuts.add(i); manualEdits++; render(); };
       th.appendChild(d);
@@ -356,19 +423,20 @@ function save(blob, name) {
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 }
-const note = gs => `ชุด ${gs.length}, เตือน ${gs.filter(x => x.warns.length).length}, PO ไม่ตรง ${gs.filter(x => x.poBad).length}, แก้มือ ${manualEdits} ครั้ง`;
+const stats = gs => ({ sets: gs.length, confirmed: `${gs.filter(x => x.confirmed).length}/${gs.length}`,
+  poBad: gs.filter(x => x.poBad).length, warns: gs.filter(x => x.warns.length).length, edits: manualEdits });
 
 async function downloadOne(g) {
   const bytes = await buildGroup(g);
   save(new Blob([bytes], { type: 'application/pdf' }), g.file);
   dlKeys.add(g.key); if (groups().every(x => dlKeys.has(x.key))) downloaded = true;
-  logEvent('Export ไฟล์เดี่ยว', { file: pdfFile.name, pages: pages.length, perFile: note(groups()),
+  logEvent('Export ไฟล์เดี่ยว', { file: pdfFile.name, pages: pages.length, ...stats(groups()),
     exported: `${g.file} (หน้า ${g.idx[0] + 1}–${g.idx[g.idx.length - 1] + 1})` });
 }
 
 $('zip').onclick = async () => {
-  const gs = groups(), wc = gs.filter(g => g.warns.length).length;
-  if (wc && !confirm(`ยังมี ${wc} ชุดที่มีคำเตือนสีแดง ต้องการดาวน์โหลดทั้งหมดเลยใช่ไหม?`)) return;
+  const gs = groups();
+  if (!gs.every(g => g.confirmed)) { setStatus('ต้องยืนยันครบทุกชุดก่อนดาวน์โหลด', true); return; }
   const btn = $('zip'); btn.disabled = true; btn.textContent = 'กำลังสร้าง ZIP…';
   try {
     const src = await PDFLib.PDFDocument.load(srcBytes, { ignoreEncryption: true });
@@ -381,14 +449,126 @@ $('zip').onclick = async () => {
     const zipName = `GR_${stamp}.zip`;
     save(await zip.generateAsync({ type: 'blob' }), zipName);
     downloaded = true;
-    logEvent('Export ZIP', { file: pdfFile.name, pages: pages.length, perFile: note(gs),
+    logEvent('Export ZIP', { file: pdfFile.name, pages: pages.length, ...stats(gs),
       exported: `${zipName} (${gs.length} ไฟล์): ${gs.map(g => g.file).join(', ')}` });
   } catch (err) {
     console.error(err); setStatus('สร้าง ZIP ไม่สำเร็จ: ' + (err.message || err), true);
   } finally {
-    btn.disabled = false; btn.textContent = 'ดาวน์โหลดทั้งหมด (ZIP)';
+    btn.textContent = 'ดาวน์โหลดทั้งหมด (ZIP)'; btn.disabled = !groups().every(g => g.confirmed);
   }
 };
+
+// ===== วาดหน้าเอกสารขนาดใหญ่ =====
+async function drawPage(i, cssH, rot = 0) {
+  const page = await pdfDoc.getPage(i + 1);
+  const rotation = (page.rotate + rot) % 360;
+  const v1 = page.getViewport({ scale: 1, rotation });
+  const dpr = window.devicePixelRatio || 1;
+  const scale = Math.min(5, cssH * dpr / v1.height);
+  const vp = page.getViewport({ scale, rotation });
+  const c = document.createElement('canvas');
+  c.width = Math.floor(vp.width); c.height = Math.floor(vp.height);
+  c.style.height = cssH + 'px'; c.style.width = (vp.width / dpr) + 'px';
+  await page.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise;
+  return c;
+}
+const typeLabel = (g, i) => {
+  const p = pages[i], c = g.checks[i];
+  if (p.gr) return `<b class="gr">GR · PO ${p.po || '?'}</b>`;
+  const po = !c ? '' : c.s === 'match' ? ' · <b class="ok">PO ตรง ✔</b>' : c.s === 'diff' ? ` · <b class="bad">PO ไม่ตรง ✗ ${c.c}</b>` : ' · <b class="bad">อ่าน PO ไม่ชัด</b>';
+  return `Invoice${po}`;
+};
+
+// ===== ตรวจทีละชุด =====
+let rvIdx = 0, rvToken = 0;
+function openReview(k) {
+  const gs = groups();
+  if (k == null) { k = gs.findIndex(g => !g.confirmed); if (k < 0) k = 0; }
+  rvIdx = k; $('rv').classList.remove('hidden'); document.body.style.overflow = 'hidden';
+  showSet();
+}
+function closeReview() { $('rv').classList.add('hidden'); document.body.style.overflow = ''; render(); }
+async function showSet() {
+  const gs = groups(), g = gs[rvIdx], tok = ++rvToken;
+  $('rvTitle').textContent = `ชุดที่ ${rvIdx + 1} / ${gs.length}`;
+  $('rvMeta').textContent = `${g.po ? 'PO ' + g.po : 'ไม่มีเลข PO'} · ${g.idx.length} หน้า (Invoice ${g.inv} + GR ${g.grs.length}) · ไฟล์ ${g.file}`;
+  $('rvStatus').innerHTML = g.warns.length
+    ? '<ul class="ov-warns">' + g.warns.map(w => `<li>⚠ ${w}</li>`).join('') + '</ul>'
+    : `<div class="ov-ok">✔ ไม่พบความผิดปกติ${g.po && g.inv ? ` · PO บน Invoice ตรงกับ GR ${g.poOk}/${g.inv} หน้า` : ''}</div>`;
+  const cc = gs.filter(x => x.confirmed).length;
+  $('rvCount').textContent = `ยืนยันแล้ว ${cc}/${gs.length} ชุด`;
+  $('rvOk').textContent = g.confirmed ? '✔ ยืนยันแล้ว (กดเพื่อยกเลิก)' : '✔ ตรวจแล้ว ยืนยันชุดนี้';
+  $('rvOk').classList.toggle('done', g.confirmed);
+  $('rvPrev').disabled = rvIdx === 0; $('rvNext').disabled = rvIdx === gs.length - 1;
+  const box = $('rvPages'); box.innerHTML = '';
+  const h = Math.max(300, box.clientHeight - 60);
+  for (const i of g.idx) {
+    const d = document.createElement('div'); d.className = 'rv-page';
+    d.innerHTML = `<div class="lbl">หน้า ${i + 1} · ${typeLabel(g, i)}</div><div style="height:${h}px;width:${Math.round(h * 0.7)}px;background:#1f2937;border-radius:4px"></div>`;
+    box.appendChild(d);
+  }
+  for (const [n, i] of g.idx.entries()) {
+    const c = await drawPage(i, h);
+    if (tok !== rvToken) return;   // เปลี่ยนชุดไปแล้ว
+    c.onclick = () => openLightbox(i);
+    box.children[n].replaceChild(c, box.children[n].lastChild);
+  }
+}
+$('startReview').onclick = () => openReview();
+$('rvClose').onclick = closeReview;
+$('rvPrev').onclick = () => { if (rvIdx > 0) { rvIdx--; showSet(); } };
+$('rvNext').onclick = () => { if (rvIdx < groups().length - 1) { rvIdx++; showSet(); } };
+$('rvOk').onclick = () => {
+  const gs = groups(), g = gs[rvIdx];
+  if (g.confirmed) { confirmed.delete(g.sig); showSet(); return; }
+  confirmed.add(g.sig);
+  const left = groups().findIndex(x => !x.confirmed);
+  if (left < 0) {
+    closeReview();
+    setStatus('ยืนยันครบทุกชุดแล้ว ✔ ดาวน์โหลดได้เลย');
+    $('zip').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (!allConfLogged) { allConfLogged = true; const all = groups();
+      logEvent('ยืนยันครบ', { file: pdfFile.name, pages: pages.length, ...stats(all), exported: all.map(x => x.po || '-').join(', ') }); }
+    return;
+  }
+  rvIdx = rvIdx + 1 < gs.length && !groups()[rvIdx + 1].confirmed ? rvIdx + 1 : left;
+  showSet();
+};
+
+// ===== ขยายดูทีละหน้า =====
+let lbPage = 0, lbZoom = 1, lbRot = 0, lbToken = 0;
+function openLightbox(i) { lbPage = i; lbZoom = 1; lbRot = 0; $('lb').classList.remove('hidden'); document.body.style.overflow = 'hidden'; showPage(); }
+function closeLightbox() { $('lb').classList.add('hidden'); if ($('rv').classList.contains('hidden')) document.body.style.overflow = ''; }
+async function showPage() {
+  const tok = ++lbToken, gs = groups(), k = gs.findIndex(x => x.idx.includes(lbPage)), g = gs[k];
+  $('lbTitle').innerHTML = `ชุด ${k + 1} · หน้า ${lbPage + 1} / ${pages.length} · ${typeLabel(g, lbPage)} · ${Math.round(lbZoom * 100)}%`;
+  $('lbPrev').disabled = lbPage === 0; $('lbNext').disabled = lbPage === pages.length - 1;
+  const body = $('lbBody'), h = (body.clientHeight - 24) * lbZoom;
+  const c = await drawPage(lbPage, h, lbRot);
+  if (tok !== lbToken) return;
+  body.innerHTML = ''; body.appendChild(c);
+}
+$('lbClose').onclick = closeLightbox;
+$('lbPrev').onclick = () => { if (lbPage > 0) { lbPage--; showPage(); } };
+$('lbNext').onclick = () => { if (lbPage < pages.length - 1) { lbPage++; showPage(); } };
+$('lbIn').onclick = () => { lbZoom = Math.min(4, lbZoom * 1.4); showPage(); };
+$('lbOut').onclick = () => { lbZoom = Math.max(0.5, lbZoom / 1.4); showPage(); };
+$('lbFit').onclick = () => { lbZoom = 1; showPage(); };
+$('lbRot').onclick = () => { lbRot = (lbRot + 90) % 360; showPage(); };
+
+document.addEventListener('keydown', e => {
+  if (!$('lb').classList.contains('hidden')) {
+    if (e.key === 'Escape') closeLightbox();
+    else if (e.key === 'ArrowLeft') $('lbPrev').click();
+    else if (e.key === 'ArrowRight') $('lbNext').click();
+    else if (e.key === '+' || e.key === '=') $('lbIn').click();
+    else if (e.key === '-') $('lbOut').click();
+  } else if (!$('rv').classList.contains('hidden')) {
+    if (e.key === 'Escape') closeReview();
+    else if (e.key === 'ArrowLeft') $('rvPrev').click();
+    else if (e.key === 'ArrowRight') $('rvNext').click();
+  }
+});
 
 window.addEventListener('beforeunload', e => { if (pages.length && !downloaded) { e.preventDefault(); e.returnValue = ''; } });
 </script>
