@@ -53,6 +53,13 @@
   .thumb .cut.join { background:#fde68a; color:#78350f; }
   .po { margin-top:3px; font-weight:700; font-size:12px; }
   .po.ok { color:var(--green); } .po.bad { color:var(--red); } .po.unk { color:var(--muted); }
+  .thumb.deleted .imgwrap { opacity:.3; }
+  .thumb.deleted .imgwrap::after { content:'ลบแล้ว'; position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    font-size:22px; font-weight:700; color:var(--red); background:rgba(255,255,255,.55); pointer-events:none; }
+  .thumb .del { margin-top:4px; width:100%; background:#fff; color:var(--red); border:1px solid #fca5a5; }
+  .thumb .del.restore { background:#fef3c7; color:#78350f; border-color:#fcd34d; }
+  .group.empty { opacity:.6; border-style:dashed; }
+  .note-grey { color:var(--muted); font-weight:700; font-size:14px; margin:0 0 10px; }
   .help { font-size:13px; color:var(--muted); margin:6px 0 0; }
   .thumb img { cursor:zoom-in; }
   .overlay { position:fixed; inset:0; background:#05080c; z-index:50; display:flex; flex-direction:column; color:#fff; }
@@ -88,7 +95,7 @@
       <div>
         <div class="big" id="sumText"></div>
         <div id="sumWarn"></div>
-        <p class="help">ตรวจทุกชุดก่อนดาวน์โหลด · <b>คลิกรูปเพื่อขยายดูชัดๆ</b> · กดปุ่ม ✂ ใต้รูปเพื่อตัดชุดเพิ่ม หรือ "รวมกับชุดถัดไป" เพื่อยกเลิกจุดตัด · คลิกป้าย GR/INV เพื่อเปลี่ยนชนิดหน้า · แก้ชื่อไฟล์ได้ในช่องของแต่ละชุด</p>
+        <p class="help">ตรวจทุกชุดก่อนดาวน์โหลด · <b>คลิกรูปเพื่อขยายดูชัดๆ</b> · กดปุ่ม ✂ ใต้รูปเพื่อตัดชุดเพิ่ม หรือ "รวมกับชุดถัดไป" เพื่อยกเลิกจุดตัด · คลิกป้าย GR/INV เพื่อเปลี่ยนชนิดหน้า · กด 🗑 เพื่อลบหน้าที่ผิด (กดกู้คืนได้) · แก้ชื่อไฟล์ได้ในช่องของแต่ละชุด</p>
       </div>
       <button id="zip">ดาวน์โหลดทั้งหมด (ZIP)</button>
     </div>
@@ -101,7 +108,7 @@
       <span class="title" id="lbTitle"></span><span class="sp"></span>
       <button class="ghost" id="lbPrev">◀ หน้าก่อน</button><button class="ghost" id="lbNext">หน้าถัดไป ▶</button>
       <button class="ghost" id="lbOut">− ย่อ</button><button class="ghost" id="lbFit">พอดีจอ</button><button class="ghost" id="lbIn">+ ขยาย</button>
-      <button class="ghost" id="lbRot">⟳ หมุน</button><button class="ghost" id="lbClose">✕ ปิด</button>
+      <button class="ghost" id="lbRot">⟳ หมุน</button><button class="ghost" id="lbDel">🗑 ลบหน้านี้</button><button class="ghost" id="lbClose">✕ ปิด</button>
     </div>
     <div class="lb-body" id="lbBody"></div>
   </div>
@@ -284,25 +291,27 @@ function groups() {
   const out = []; let cur = [];
   pages.forEach((p, i) => { cur.push(i); if (cuts.has(i) || i === pages.length - 1) { out.push(cur); cur = []; } });
   const res = out.map((idx, k) => {
-    const grs = idx.filter(i => pages[i].gr), inv = idx.length - grs.length;
+    const keep = idx.filter(i => !pages[i].deleted);            // หน้าที่จะอยู่ในไฟล์ (ไม่รวมหน้าที่ลบ)
+    const grs = keep.filter(i => pages[i].gr), inv = keep.length - grs.length;
     const po = grs.length ? pages[grs[0]].po : '';
     const warns = [];
+    const key = idx[0];
+    if (!keep.length) return { idx, keep, grs, inv, po, warns, key, empty: true, name: '' };
     if (!grs.length) warns.push('ไม่มีหน้า GR (บาร์โค้ด) ในชุดนี้');
-    else if (!pages[idx[idx.length - 1]].gr) warns.push('หน้าสุดท้ายของชุดไม่ใช่ GR');
+    else if (!pages[keep[keep.length - 1]].gr) warns.push('หน้าสุดท้ายของชุดไม่ใช่ GR');
     if (grs.length > 1) warns.push(`มี GR ${grs.length} แผ่นในชุดเดียว`);
     if (!inv) warns.push('ไม่มีหน้า Invoice ในชุดนี้');
     if (inv > MAX_INV_PAGES) warns.push(`มี Invoice ${inv} แผ่น มากผิดปกติ อาจรวม 2 ชุดเข้าด้วยกัน`);
     if (grs.length && !po) warns.push('อ่านเลข PO ไม่ได้ กรุณาพิมพ์ชื่อไฟล์เอง');
-    const key = idx[0];
     const def = po ? `PO${po}_${stamp}` : `ไม่มีPO_${stamp}_ชุด${k + 1}`;
-    return { idx, grs, inv, po, warns, key, name: safeName(names[key] ?? def) || def };
+    return { idx, keep, grs, inv, po, warns, key, name: safeName(names[key] ?? def) || def };
   });
   // ตรวจเลข PO บน Invoice เทียบกับ GR
-  const allPOs = new Set(pages.filter(p => p.gr && p.po).map(p => p.po));
+  const allPOs = new Set(pages.filter(p => p.gr && p.po && !p.deleted).map(p => p.po));
   res.forEach(g => {
     g.checks = {}; g.poOk = 0; g.poBad = 0;
     if (!g.po) return;
-    const invIdx = g.idx.filter(i => !pages[i].gr);
+    const invIdx = g.keep.filter(i => !pages[i].gr);
     invIdx.forEach(i => { g.checks[i] = poCheck(pages[i].text, g.po, allPOs); });
     const vals = Object.entries(g.checks);
     g.poOk = vals.filter(([, c]) => c.s === 'match').length;
@@ -320,7 +329,7 @@ function groups() {
   res.forEach(g => { if (g.po && seen[g.po].length > 1) g.warns.push(`เลข PO ${g.po} ซ้ำกับชุดที่ ${seen[g.po].join(', ')}`); });
   // ชื่อไฟล์ซ้ำ → เติม _2, _3
   const used = {};
-  res.forEach(g => { let n = g.name, c = 1; while (used[n.toLowerCase()]) n = `${g.name}_${++c}`; used[n.toLowerCase()] = 1; g.file = n + '.pdf'; });
+  res.forEach(g => { if (g.empty) return; let n = g.name, c = 1; while (used[n.toLowerCase()]) n = `${g.name}_${++c}`; used[n.toLowerCase()] = 1; g.file = n + '.pdf'; });
   return res;
 }
 
@@ -330,34 +339,43 @@ const poLabel = c => !c ? '' : c.s === 'match' ? '<div class="po ok">PO ตร�
 // ===== แสดงผลหน้าตรวจทาน =====
 function render() {
   const gs = groups(), wc = gs.filter(g => g.warns.length).length;
-  $('sumText').textContent = `พบ ${gs.length} ชุด จาก ${pages.length} หน้า (GR ${pages.filter(p => p.gr).length} แผ่น)`;
+  const live = gs.filter(g => !g.empty).length, del = pages.filter(p => p.deleted).length;
+  $('sumText').textContent = `พบ ${live} ชุด จาก ${pages.length} หน้า (GR ${pages.filter(p => p.gr && !p.deleted).length} แผ่น)` + (del ? ` · ลบออก ${del} หน้า` : '');
   $('sumWarn').innerHTML = wc ? `<span class="bad">⚠ มี ${wc} ชุดที่ต้องตรวจ (กรอบสีแดง)</span>` : '<span class="ok">✔ ไม่พบความผิดปกติ</span>';
   const box = $('groups'); box.innerHTML = '';
   gs.forEach((g, k) => {
     const card = document.createElement('div');
-    card.className = 'card group' + (g.warns.length ? ' warn' : '');
-    card.innerHTML = `
+    card.className = 'card group' + (g.warns.length ? ' warn' : '') + (g.empty ? ' empty' : '');
+    const delN = g.idx.length - g.keep.length;
+    card.innerHTML = g.empty ? `
+      <div class="ghead"><span class="gno">ชุด ${k + 1}</span><span class="meta">หน้า ${g.idx[0] + 1}–${g.idx[g.idx.length - 1] + 1}</span></div>
+      <p class="note-grey">ลบออกทุกหน้า · ชุดนี้จะไม่ถูกดาวน์โหลด (กดกู้คืนได้)</p>
+      <div class="thumbs"></div>` : `
       <div class="ghead">
         <span class="gno">ชุด ${k + 1}</span>
-        <span class="meta">${g.idx.length} หน้า (Invoice ${g.inv} + GR ${g.grs.length}) · หน้า ${g.idx[0] + 1}–${g.idx[g.idx.length - 1] + 1}${g.po && g.inv ? ` · <b class="${g.poBad ? 'bad' : g.poOk ? 'ok' : 'bad'}">PO ตรง ${g.poOk}/${g.inv} หน้า</b>` : ''}</span>
+        <span class="meta">${g.keep.length} หน้า (Invoice ${g.inv} + GR ${g.grs.length})${delN ? ` · <b class="bad">ลบ ${delN} หน้า</b>` : ''} · หน้า ${g.idx[0] + 1}–${g.idx[g.idx.length - 1] + 1}${g.po && g.inv ? ` · <b class="${g.poBad ? 'bad' : g.poOk ? 'ok' : 'bad'}">PO ตรง ${g.poOk}/${g.inv} หน้า</b>` : ''}</span>
         <input value="${g.name.replace(/"/g, '&quot;')}" title="ชื่อไฟล์"><span class="meta">.pdf</span>
         <button class="small dl">ดาวน์โหลด</button>
       </div>
       ${g.warns.length ? '<ul class="warns">' + g.warns.map(w => `<li>${w}</li>`).join('') + '</ul>' : ''}
       <div class="thumbs"></div>`;
-    card.querySelector('input').onchange = e => { names[g.key] = e.target.value; manualEdits++; render(); };
-    card.querySelector('.dl').onclick = () => downloadOne(g);
+    if (!g.empty) {
+      card.querySelector('input').onchange = e => { names[g.key] = e.target.value; manualEdits++; render(); };
+      card.querySelector('.dl').onclick = () => downloadOne(g);
+    }
     const th = card.querySelector('.thumbs');
     g.idx.forEach(i => {
       const p = pages[i], last = i === pages.length - 1, isCut = cuts.has(i);
-      const d = document.createElement('div'); d.className = 'thumb';
+      const d = document.createElement('div'); d.className = 'thumb' + (p.deleted ? ' deleted' : '');
       d.innerHTML = `<div class="imgwrap"><img src="${p.thumb}" alt="หน้า ${i + 1}">
           <button class="badge ${p.gr ? 'gr' : 'inv'}${p.manual ? ' manual' : ''}" title="คลิกเพื่อเปลี่ยนชนิดหน้า">${p.gr ? 'GR' + (p.po ? ' ' + p.po : '') : 'INV'}</button></div>
         หน้า ${i + 1}
-        ${poLabel(g.checks[i])}
+        ${p.deleted ? '' : poLabel(g.checks[i])}
+        <button class="small del${p.deleted ? ' restore' : ''}">${p.deleted ? '↩ กู้คืน' : '🗑 ลบหน้านี้'}</button>
         ${last ? '' : `<button class="small cut ${isCut ? 'join' : 'ghost'}">${isCut ? '⤵ รวมกับชุดถัดไป' : '✂ ตัดหลังหน้านี้'}</button>`}`;
       d.querySelector('img').onclick = () => openLightbox(i);
       d.querySelector('.badge').onclick = () => { p.gr = !p.gr; p.manual = !p.manual; manualEdits++; render(); };
+      d.querySelector('.del').onclick = () => toggleDelete(i);
       if (!last) d.querySelector('.cut').onclick = () => { isCut ? cuts.delete(i) : cuts.add(i); manualEdits++; render(); };
       th.appendChild(d);
     });
@@ -366,18 +384,20 @@ function render() {
   $('review').classList.remove('hidden');
 }
 
+function toggleDelete(i) { pages[i].deleted = !pages[i].deleted; manualEdits++; render(); }
+
 // ===== สร้าง PDF ของแต่ละชุด =====
 async function buildGroup(g) {
   const src = await PDFLib.PDFDocument.load(srcBytes, { ignoreEncryption: true });
   const out = await PDFLib.PDFDocument.create();
-  (await out.copyPages(src, g.idx)).forEach(p => out.addPage(p));
+  (await out.copyPages(src, g.keep)).forEach(p => out.addPage(p));
   return out.save();
 }
 function save(blob, name) {
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 }
-const stats = gs => ({ sets: gs.length, poBad: gs.filter(x => x.poBad).length,
+const stats = gs => ({ sets: gs.filter(x => !x.empty).length, poBad: gs.filter(x => x.poBad).length,
   warns: gs.filter(x => x.warns.length).length, edits: manualEdits });
 
 async function downloadOne(g) {
@@ -390,21 +410,22 @@ async function downloadOne(g) {
 
 $('zip').onclick = async () => {
   const gs = groups(), wc = gs.filter(g => g.warns.length).length;
+  if (!gs.some(g => !g.empty)) { setStatus('ไม่มีหน้าเหลือให้ดาวน์โหลด (ลบออกทั้งหมด)', true); return; }
   if (wc && !confirm(`ยังมี ${wc} ชุดที่มีคำเตือนสีแดง ต้องการดาวน์โหลดทั้งหมดเลยใช่ไหม?`)) return;
   const btn = $('zip'); btn.disabled = true; btn.textContent = 'กำลังสร้าง ZIP…';
   try {
     const src = await PDFLib.PDFDocument.load(srcBytes, { ignoreEncryption: true });
     const zip = new JSZip();
-    for (const g of gs) {
+    for (const g of gs.filter(x => !x.empty)) {
       const out = await PDFLib.PDFDocument.create();
-      (await out.copyPages(src, g.idx)).forEach(p => out.addPage(p));
+      (await out.copyPages(src, g.keep)).forEach(p => out.addPage(p));
       zip.file(g.file, await out.save());
     }
     const zipName = `GR_${stamp}.zip`;
     save(await zip.generateAsync({ type: 'blob' }), zipName);
     downloaded = true;
     logEvent('Export ZIP', { file: pdfFile.name, pages: pages.length, ...stats(gs),
-      exported: `${zipName} (${gs.length} ไฟล์): ${gs.map(g => g.file).join(', ')}` });
+      exported: `${zipName} (${gs.filter(g => !g.empty).length} ไฟล์): ${gs.filter(g => !g.empty).map(g => g.file).join(', ')}` });
   } catch (err) {
     console.error(err); setStatus('สร้าง ZIP ไม่สำเร็จ: ' + (err.message || err), true);
   } finally {
@@ -440,11 +461,14 @@ function openLightbox(i) { lbPage = i; lbZoom = 1; lbRot = uprightRot(i); $('lb'
 function closeLightbox() { $('lb').classList.add('hidden'); document.body.style.overflow = ''; }
 async function showPage() {
   const tok = ++lbToken, gs = groups(), k = gs.findIndex(x => x.idx.includes(lbPage)), g = gs[k];
-  $('lbTitle').innerHTML = `ชุด ${k + 1} · หน้า ${lbPage + 1} / ${pages.length} · ${typeLabel(g, lbPage)} · ${Math.round(lbZoom * 100)}%`;
+  const dl = pages[lbPage].deleted;
+  $('lbTitle').innerHTML = `ชุด ${k + 1} · หน้า ${lbPage + 1} / ${pages.length} · ${typeLabel(g, lbPage)}${dl ? ' · <b class="bad">ลบแล้ว</b>' : ''} · ${Math.round(lbZoom * 100)}%`;
+  $('lbDel').textContent = dl ? '↩ กู้คืนหน้านี้' : '🗑 ลบหน้านี้';
   $('lbPrev').disabled = lbPage === 0; $('lbNext').disabled = lbPage === pages.length - 1;
   const body = $('lbBody'), h = (body.clientHeight - 24) * lbZoom;
   const c = await drawPage(lbPage, h, lbRot);
   if (tok !== lbToken) return;
+  c.style.opacity = dl ? .35 : 1;
   body.innerHTML = ''; body.appendChild(c);
 }
 $('lbClose').onclick = closeLightbox;
@@ -453,6 +477,7 @@ $('lbNext').onclick = () => { if (lbPage < pages.length - 1) { lbPage++; lbRot =
 $('lbIn').onclick = () => { lbZoom = Math.min(4, lbZoom * 1.4); showPage(); };
 $('lbOut').onclick = () => { lbZoom = Math.max(0.5, lbZoom / 1.4); showPage(); };
 $('lbFit').onclick = () => { lbZoom = 1; showPage(); };
+$('lbDel').onclick = () => { toggleDelete(lbPage); showPage(); };
 $('lbRot').onclick = () => { lbRot = (lbRot + 270) % 360; showPage(); };
 
 document.addEventListener('keydown', e => {
