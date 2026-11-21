@@ -60,6 +60,7 @@
   .thumb .del.restore { background:#fef3c7; color:#78350f; border-color:#fcd34d; }
   .group.empty { opacity:.6; border-style:dashed; }
   .note-grey { color:var(--muted); font-weight:700; font-size:14px; margin:0 0 10px; }
+  .chip-gor { font-size:14px; font-weight:700; background:#e0e7ff; color:#3730a3; padding:3px 10px; border-radius:999px; }
   .size { font-size:14px; font-weight:700; }
   .size.ok { color:var(--green); } .size.wait { color:#b45309; } .size.bad { color:var(--red); } .size.muted { color:var(--muted); font-weight:400; }
   .help { font-size:13px; color:var(--muted); margin:6px 0 0; }
@@ -79,7 +80,7 @@
 <body>
 <main>
   <h1>แยกชุดเอกสาร Invoice + Goods Receiving Note อัตโนมัติ</h1>
-  <p class="sub">อัปโหลดไฟล์สแกนที่มีหลายชุดรวมกัน โปรแกรมจะหาหน้า GR จากบาร์โค้ด แล้วตัดชุดหลังหน้า GR ทุกแผ่น ตั้งชื่อไฟล์ตามเลข PO และตรวจว่าเลข PO บน Invoice ตรงกับ GR<br>ไฟล์ประมวลผลในเบราว์เซอร์ของคุณเท่านั้น ไม่ถูกส่งขึ้นเซิร์ฟเวอร์</p>
+  <p class="sub">อัปโหลดไฟล์สแกนที่มีหลายชุดรวมกัน โปรแกรมจะหาหน้า GR จากบาร์โค้ด แล้วตัดชุดหลังหน้า GR ทุกแผ่น ตั้งชื่อไฟล์ตามเลขตรวจรับ (GOR In.) และตรวจว่าเลข PO บน Invoice ตรงกับ GR<br>ไฟล์ประมวลผลในเบราว์เซอร์ของคุณเท่านั้น ไม่ถูกส่งขึ้นเซิร์ฟเวอร์</p>
 
   <div class="card">
     <div id="drop">
@@ -178,6 +179,19 @@ async function getScheduler() {
   }
   return (scheduler = s);
 }
+// เลขตรวจรับ (GOR In.) บนหน้า GR เช่น "GOR In. : 151146"  (ไม่เอา 920 ที่เป็นรหัสคลัง)
+function parseGor(text) {
+  const m = (text || '').replace(/\s+/g, ' ').match(/[GC][O0]R\s*[I1l]n[\s.,:;]*(?:920\s*)?(\d{6,8})(?!\d)/i);
+  return m ? m[1] : '';
+}
+// หมุนภาพ 90° (หน้า GR พิมพ์ตะแคง ต้องหมุนก่อนอ่าน)
+function rotated(src, dir) {
+  const c = document.createElement('canvas'); c.width = src.height; c.height = src.width;
+  const x = c.getContext('2d'); x.filter = 'grayscale(1) contrast(1.5)';
+  if (dir < 0) { x.translate(0, c.height); x.rotate(-Math.PI / 2); } else { x.translate(c.width, 0); x.rotate(Math.PI / 2); }
+  x.drawImage(src, 0, 0);
+  return c;
+}
 const hamming = (a, b) => [...a].reduce((n, ch, i) => n + (ch !== b[i]), 0);
 // เลข PO บน Invoice: 920 = รหัสสาขา (ซัพพลายเออร์บางเจ้าใส่ บางเจ้าไม่ใส่) ตามด้วยเลข PO 7 หลักที่ตรงกับ GR
 // หาเลขที่น่าจะเป็น PO ได้ 3 แบบ: (1) ตามหลัง 920  (2) ตามหลังคำว่า PO / P.O. / สั่งซื้อ  (3) เลข 7 หลักที่ตรงกับ PO ของ GR ชุดอื่นในไฟล์
@@ -267,8 +281,15 @@ async function analyze() {
       const t = document.createElement('canvas'), tw = 160;
       t.width = tw; t.height = Math.round(canvas.height * tw / canvas.width);
       t.getContext('2d').drawImage(canvas, 0, 0, t.width, t.height);
-      const pg = { thumb: t.toDataURL('image/jpeg', 0.7), gr: !!code, po: code ? code.text : '', manual: false, text: null };
+      const pg = { thumb: t.toDataURL('image/jpeg', 0.7), gr: !!code, po: code ? code.text : '', manual: false, text: null, gor: '' };
       pages.push(pg);
+      if (code && sched) {
+        // อ่านเลขตรวจรับจากหน้า GR: ลองหมุนทั้ง 2 ทาง ใช้ทางที่อ่านเจอ
+        for (const dir of [-1, 1]) {
+          const blob = await new Promise(r => rotated(canvas, dir).toBlob(r, 'image/png'));
+          ocrJobs.push(sched.addJob('recognize', blob).then(r => { if (!pg.gor) pg.gor = parseGor(r.data.text); }).catch(e => console.warn('ocr', e)));
+        }
+      }
       if (!code && sched) {
         // แปลงเป็นขาวดำ เพิ่มความคม ให้อ่านตัวหนังสือบนกระดาษสีได้ดีขึ้น
         const oc = document.createElement('canvas'); oc.width = canvas.width; oc.height = canvas.height;
@@ -289,7 +310,7 @@ async function analyze() {
     render();
     const g = groups();
     setStatus('ตรวจเสร็จแล้ว ✔ กรุณาตรวจทานแต่ละชุดก่อนดาวน์โหลด (คลิกรูปเพื่อขยายดู)');
-    logEvent('แยกชุด', { file: pdfFile.name, pages: pages.length, ...stats(g), exported: g.map(x => x.po || '-').join(', ') });
+    logEvent('แยกชุด', { file: pdfFile.name, pages: pages.length, ...stats(g), exported: g.filter(x => !x.empty).map(x => x.gor || ('PO' + (x.po || '-'))).join(', ') });
   } catch (err) {
     console.error(err); setProgress(null);
     setStatus('อ่านไฟล์ไม่สำเร็จ: ' + (err.message || err) + ' (ไฟล์อาจเสียหรือติดรหัสผ่าน)', true);
@@ -306,6 +327,7 @@ function groups() {
     const keep = idx.filter(i => !pages[i].deleted);            // หน้าที่จะอยู่ในไฟล์ (ไม่รวมหน้าที่ลบ)
     const grs = keep.filter(i => pages[i].gr), inv = keep.length - grs.length;
     const po = grs.length ? pages[grs[0]].po : '';
+    const gor = grs.length ? pages[grs[0]].gor : '';
     const warns = [];
     const key = idx[0];
     if (!keep.length) return { idx, keep, grs, inv, po, warns, key, empty: true, name: '' };
@@ -315,8 +337,9 @@ function groups() {
     if (!inv) warns.push('ไม่มีหน้า Invoice ในชุดนี้');
     if (inv > MAX_INV_PAGES) warns.push(`มี Invoice ${inv} แผ่น มากผิดปกติ อาจรวม 2 ชุดเข้าด้วยกัน`);
     if (grs.length && !po) warns.push('อ่านเลข PO ไม่ได้ กรุณาพิมพ์ชื่อไฟล์เอง');
-    const def = po ? `PO${po}_${stamp}` : `ไม่มีPO_${stamp}_ชุด${k + 1}`;
-    return { idx, keep, grs, inv, po, warns, key, name: safeName(names[key] ?? def) || def };
+    if (grs.length && !gor && !names[key]) warns.push('อ่านเลขตรวจรับ (GOR In.) บนหน้า GR ไม่ได้ ใช้ชื่อตาม PO แทน กรุณาพิมพ์เลขตรวจรับเป็นชื่อไฟล์เอง');
+    const def = gor ? gor : po ? `PO${po}_${stamp}` : `ไม่มีPO_${stamp}_ชุด${k + 1}`;
+    return { idx, keep, grs, inv, po, gor, warns, key, name: safeName(names[key] ?? def) || def };
   });
   // ตรวจเลข PO บน Invoice เทียบกับ GR
   const allPOs = new Set(pages.filter(p => p.gr && p.po && !p.deleted).map(p => p.po));
@@ -345,6 +368,9 @@ function groups() {
   const seen = {};
   res.forEach((g, k) => { if (g.po) (seen[g.po] = seen[g.po] || []).push(k + 1); });
   res.forEach(g => { if (g.po && seen[g.po].length > 1) g.warns.push(`เลข PO ${g.po} ซ้ำกับชุดที่ ${seen[g.po].join(', ')}`); });
+  const seenG = {};
+  res.forEach((g, k) => { if (g.gor) (seenG[g.gor] = seenG[g.gor] || []).push(k + 1); });
+  res.forEach(g => { if (g.gor && seenG[g.gor].length > 1) g.warns.push(`เลขตรวจรับ ${g.gor} ซ้ำกับชุดที่ ${seenG[g.gor].join(', ')}`); });
   // ชื่อไฟล์ซ้ำ → เติม _2, _3
   const used = {};
   res.forEach(g => { if (g.empty) return; let n = g.name, c = 1; while (used[n.toLowerCase()]) n = `${g.name}_${++c}`; used[n.toLowerCase()] = 1; g.file = n + '.pdf'; });
@@ -372,6 +398,7 @@ function render() {
       <div class="thumbs"></div>` : `
       <div class="ghead">
         <span class="gno">ชุด ${k + 1}</span>
+        ${g.gor ? `<span class="chip-gor">เลขตรวจรับ ${g.gor}</span>` : ''}
         <span class="meta">${g.keep.length} หน้า (Invoice ${g.inv} + GR ${g.grs.length})${delN ? ` · <b class="bad">ลบ ${delN} หน้า</b>` : ''} · หน้า ${g.idx[0] + 1}–${g.idx[g.idx.length - 1] + 1}${g.po && g.inv ? ` · <b class="${g.poBad ? 'bad' : g.poOk ? 'ok' : 'bad'}">PO ตรง ${g.poOk}/${g.inv} หน้า</b>` : ''}</span>
         <span class="size muted">ขนาด …</span>
         <input value="${g.name.replace(/"/g, '&quot;')}" title="ชื่อไฟล์"><span class="meta">.pdf</span>
@@ -541,7 +568,7 @@ async function drawPage(i, cssH, rot = 0) {
 }
 const typeLabel = (g, i) => {
   const p = pages[i], c = g.checks[i];
-  if (p.gr) return `<b class="gr">GR · PO ${p.po || '?'}</b>`;
+  if (p.gr) return `<b class="gr">GR · เลขตรวจรับ ${p.gor || '?'} · PO ${p.po || '?'}</b>`;
   const po = !c ? '' : c.s === 'match' ? ' · <b class="ok">PO ตรง ✔</b>' : c.s === 'diff' ? ` · <b class="bad">PO ไม่ตรง ✗ ${c.c}</b>` : ' · <b class="bad">อ่าน PO ไม่ชัด</b>';
   return `Invoice${po}`;
 };
